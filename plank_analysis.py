@@ -10,8 +10,8 @@ from intersect import intersection
 # Apply the default theme
 sns.set_theme()
 
-inputVoltage = np.load("orangeVoltage.npy")[:,50:250]
-inputCurrent = np.load("orangeCurrent.npy")[50:250]
+inputVoltage = np.load("runs/grellowVoltage.npy")[:,50:250]
+inputCurrent = np.load("runs/grellowCurrent.npy")[50:250]
 
 """
 Uncertainty in current was not saved when taking the measurements
@@ -43,10 +43,24 @@ def exp(x, a, b):
 
 full_span = np.linspace(voltage[0], voltage[199], 200)
 
-poptExp, pcovExp = curve_fit(exp, voltage[0:175], current[0:175], maxfev = 5000) 
+# values tweaked to find best fit separation
+"""
+Yellow: lin(0:25) exp(50:) x
+Blue:  lin(0:50) exp (0:110)
+Red Turn: lin(0:8) exp (8:) x
+Green: lin(0:50) exp (50:150) x
+Green-yellow: lin(0:25) exp (0:150) x
+UV: lin(0:30) exp (0:200) x 
+Orange: lin(0:25) exp (0:175) x 
+"""
+
+expLow, expHigh = 0, 150
+linLow, linHigh = 0, 25
+
+poptExp, pcovExp = curve_fit(exp, voltage[expLow:expHigh], current[expLow:expHigh], maxfev = 5000) 
 perrExp = np.sqrt(np.diag(pcovExp))
 
-poptLin, pcovLin = curve_fit(exp, voltage[0:25], current[0:25], maxfev = 5000) 
+poptLin, pcovLin = curve_fit(exp, voltage[linLow:linHigh], current[linLow:linHigh], maxfev = 5000) 
 perrLin = np.sqrt(np.diag(pcovLin))
 
 # Data for best fit curve
@@ -83,18 +97,26 @@ plt.xlabel("$\Delta V$ through orange diode")
 plt.tight_layout()
 
 # show plot
-plt.savefig('figures/orange-LED-IV.png', dpi=300)
+#plt.savefig('figures/orange-LED-IV.png', dpi=300)
 plt.show()
 
-# Yellow Turn on voltage: 1.4964217 +/- 0.012986089200325983 lin(0:25) exp(50:)
-# Blue Turn on voltage: 2.14221882 +/- 0.02281015358361129 lin(0:50) exp (0:110)
-# Red Turn on voltage: 1.33059767 +/- 0.012360585108488581 lin(0:8) exp (8:)
-# Green Turn On Voltage: 1.39540369 +/- 0.02142212556381303 lin(0:50) exp (50:150)
-# Green-yellow Turn On Voltage: 1.38297366 +/- 0.013274924175250913 lin(0:25) exp (0:150)
-# UV  Turn On Voltage: 2.60097467 +/- 0.025951242929463464 lin(0:30) exp (0:200)
-# Orange  Turn On Voltage: 1.41547249 +/- 0.012963434413901116 lin(0:25) exp (0:175)
-
 # Chi2 to assess quality of the fit
-#difference = abs(current[:]-expected_out)
+expected_out = exp(full_span[expLow:expHigh], poptExp[0], poptExp[1])
 
-#chi2 = np.sum(np.square(difference)/expected_out) #TODO divide by std dev square
+difference = abs(current[expLow:expHigh]-expected_out)
+index = []
+currentError=currentError[expLow:expHigh]
+
+# Some value have zero error, remove them from the chi2
+for i in range(len(currentError)):
+    if currentError[i]==0:
+        index.append(i)
+
+currentError = np.delete(currentError, index)
+difference = np.delete(difference, index)
+expected_out = np.delete(expected_out, index)
+
+dof = len(difference)-2
+
+reducedChi2 = np.sum(np.square(difference)/(currentError**2))/dof
+chi2 = np.sum(np.square(difference)/(expected_out))
